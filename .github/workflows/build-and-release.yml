@@ -27,7 +27,8 @@ jobs:
       - name: Generate Windows icon
         run: |
           cd release\windows
-          magick convert ..\..\retro_rpg.jpeg -resize 256x256 .\retro_rpg.ico
+          if (-not (Test-Path .\retro_rpg.jpeg)) { throw "Icon source not found: release\\windows\\retro_rpg.jpeg" }
+          magick convert .\retro_rpg.jpeg -resize 256x256 .\retro_rpg.ico
         shell: powershell
 
       - name: Create jar
@@ -64,16 +65,21 @@ jobs:
         shell: bash
       - name: Generate macOS icon (.icns)
         run: |
+          ICON_SRC="release/macos/retro_rpg.jpeg"
+          if [ ! -f "$ICON_SRC" ]; then
+            echo "Icon source not found: $ICON_SRC" >&2
+            exit 1
+          fi
           mkdir -p tmp.iconset
-          sips -z 16 16   retro_rpg.jpeg --out tmp.iconset/icon_16x16.png
-          sips -z 32 32   retro_rpg.jpeg --out tmp.iconset/icon_16x16@2x.png
-          sips -z 32 32   retro_rpg.jpeg --out tmp.iconset/icon_32x32.png
-          sips -z 64 64   retro_rpg.jpeg --out tmp.iconset/icon_32x32@2x.png
-          sips -z 128 128 retro_rpg.jpeg --out tmp.iconset/icon_128x128.png
-          sips -z 256 256 retro_rpg.jpeg --out tmp.iconset/icon_128x128@2x.png
-          sips -z 256 256 retro_rpg.jpeg --out tmp.iconset/icon_256x256.png
-          sips -z 512 512 retro_rpg.jpeg --out tmp.iconset/icon_256x256@2x.png
-          sips -z 512 512 retro_rpg.jpeg --out tmp.iconset/icon_512x512.png
+          sips -z 16 16   "$ICON_SRC" --out tmp.iconset/icon_16x16.png
+          sips -z 32 32   "$ICON_SRC" --out tmp.iconset/icon_16x16@2x.png
+          sips -z 32 32   "$ICON_SRC" --out tmp.iconset/icon_32x32.png
+          sips -z 64 64   "$ICON_SRC" --out tmp.iconset/icon_32x32@2x.png
+          sips -z 128 128 "$ICON_SRC" --out tmp.iconset/icon_128x128.png
+          sips -z 256 256 "$ICON_SRC" --out tmp.iconset/icon_128x128@2x.png
+          sips -z 256 256 "$ICON_SRC" --out tmp.iconset/icon_256x256.png
+          sips -z 512 512 "$ICON_SRC" --out tmp.iconset/icon_256x256@2x.png
+          sips -z 512 512 "$ICON_SRC" --out tmp.iconset/icon_512x512.png
           iconutil -c icns tmp.iconset -o release/macos/retro_rpg.icns
         shell: bash
 
@@ -109,7 +115,12 @@ jobs:
         shell: bash
       - name: Generate Linux PNG icon
         run: |
-          magick convert retro_rpg.jpeg -resize 512x512 release/linux/retro_rpg.png
+          ICON_SRC="release/linux/retro_rpg.jpeg"
+          if [ ! -f "$ICON_SRC" ]; then
+            echo "Icon source not found: $ICON_SRC" >&2
+            exit 1
+          fi
+          convert "$ICON_SRC" -resize 512x512 release/linux/retro_rpg.png
         shell: bash
 
       - name: Create jar
