@@ -171,8 +171,14 @@ jobs:
           path: release-artifacts
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v1
-        if: github.event_name == 'release'
         with:
+          tag_name: nightly
+          name: Nightly Build
+          draft: false
+          prerelease: true
+          target_commitish: ${{ github.sha }}
           files: release-artifacts/**
+          fail_on_unmatched_files: true
+          make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
