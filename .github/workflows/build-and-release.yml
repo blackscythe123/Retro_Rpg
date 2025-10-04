@@ -27,8 +27,15 @@ jobs:
       - name: Generate Windows icon
         run: |
           cd release\windows
-          if (-not (Test-Path .\retro_rpg.jpeg)) { throw "Icon source not found: release\\windows\\retro_rpg.jpeg" }
-          magick convert .\retro_rpg.jpeg -resize 256x256 .\retro_rpg.ico
+          if (-not (Test-Path .\retro_rpg.jpeg)) {
+            Write-Warning "Icon source not found: release\\windows\\retro_rpg.jpeg"
+          } else {
+            & magick convert .\retro_rpg.jpeg -resize 256x256 .\retro_rpg.ico
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning "Windows icon generation failed (exit code $LASTEXITCODE); continuing without custom icon."
+              if (Test-Path .\retro_rpg.ico) { Remove-Item .\retro_rpg.ico -ErrorAction SilentlyContinue }
+            }
+          }
         shell: powershell
 
       - name: Create jar
@@ -66,21 +73,17 @@ jobs:
       - name: Generate macOS icon (.icns)
         run: |
           ICON_SRC="release/macos/retro_rpg.jpeg"
+          ICON_DEST="release/macos/retro_rpg.icns"
           if [ ! -f "$ICON_SRC" ]; then
             echo "Icon source not found: $ICON_SRC" >&2
-            exit 1
+            exit 0
           fi
-          mkdir -p tmp.iconset
-          sips -z 16 16   "$ICON_SRC" --out tmp.iconset/icon_16x16.png
-          sips -z 32 32   "$ICON_SRC" --out tmp.iconset/icon_16x16@2x.png
-          sips -z 32 32   "$ICON_SRC" --out tmp.iconset/icon_32x32.png
-          sips -z 64 64   "$ICON_SRC" --out tmp.iconset/icon_32x32@2x.png
-          sips -z 128 128 "$ICON_SRC" --out tmp.iconset/icon_128x128.png
-          sips -z 256 256 "$ICON_SRC" --out tmp.iconset/icon_128x128@2x.png
-          sips -z 256 256 "$ICON_SRC" --out tmp.iconset/icon_256x256.png
-          sips -z 512 512 "$ICON_SRC" --out tmp.iconset/icon_256x256@2x.png
-          sips -z 512 512 "$ICON_SRC" --out tmp.iconset/icon_512x512.png
-          iconutil -c icns tmp.iconset -o release/macos/retro_rpg.icns
+          if magick "$ICON_SRC" -define icns:auto-resize=16,32,64,128,256,512 "$ICON_DEST"; then
+            echo "Generated macOS ICNS icon at $ICON_DEST"
+          else
+            echo "Warning: macOS icon generation failed; continuing without custom icon" >&2
+            rm -f "$ICON_DEST"
+          fi
         shell: bash
 
       - name: Create jar
@@ -116,11 +119,17 @@ jobs:
       - name: Generate Linux PNG icon
         run: |
           ICON_SRC="release/linux/retro_rpg.jpeg"
+          ICON_DEST="release/linux/retro_rpg.png"
           if [ ! -f "$ICON_SRC" ]; then
             echo "Icon source not found: $ICON_SRC" >&2
-            exit 1
+            exit 0
           fi
-          convert "$ICON_SRC" -resize 512x512 release/linux/retro_rpg.png
+          if convert "$ICON_SRC" -resize 512x512 "$ICON_DEST"; then
+            echo "Generated Linux icon at $ICON_DEST"
+          else
+            echo "Warning: Linux icon generation failed; continuing without custom icon" >&2
+            rm -f "$ICON_DEST"
+          fi
         shell: bash
 
       - name: Create jar
