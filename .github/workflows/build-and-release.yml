@@ -1,0 +1,188 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main, master,test]
+  release:
+    types: [published]
+
+jobs:
+  build-windows:
+    name: Build Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile
+        run: |
+          javac -d bin $(Get-ChildItem -Recurse -Filter *.java | ForEach-Object { $_.FullName } )
+      - name: Install ImageMagick (Choco)
+        run: |
+          choco install imagemagick -y
+        shell: powershell
+      - name: Ensure WiX Toolset
+        run: |
+          choco upgrade wixtoolset -y --no-progress
+        shell: powershell
+      - name: Generate Windows icon
+        run: |
+          cd release\windows
+          if (-not (Test-Path .\retro_rpg.jpeg)) {
+            Write-Warning "Icon source not found: release\\windows\\retro_rpg.jpeg"
+          } else {
+            & magick convert .\retro_rpg.jpeg -resize 256x256 .\retro_rpg.ico
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning "Windows icon generation failed (exit code $LASTEXITCODE); continuing without custom icon."
+              if (Test-Path .\retro_rpg.ico) { Remove-Item .\retro_rpg.ico -ErrorAction SilentlyContinue }
+            }
+          }
+        shell: powershell
+
+      - name: Create jar
+        run: |
+          cd release\windows
+          .\build-jar.bat
+      - name: Run jpackage (Windows)
+        run: |
+          cd release\windows
+          pwsh -File .\jpackage-windows.ps1 -MainJar ..\..\RetroGame.jar -MainClass utils.RetroConsole -Name RetroGame -Dest ..\release-output
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: release\release-output
+
+  build-macos:
+    name: Build macOS installer
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile
+        run: |
+          mkdir -p bin
+          find src -name "*.java" -print0 | xargs -0 javac -d bin
+      - name: Install ImageMagick
+        run: |
+          brew install imagemagick
+        shell: bash
+      - name: Generate macOS icon (.icns)
+        run: |
+          ICON_SRC="release/macos/retro_rpg.jpeg"
+          ICON_DEST="release/macos/retro_rpg.icns"
+          if [ ! -f "$ICON_SRC" ]; then
+            echo "Icon source not found: $ICON_SRC" >&2
+            exit 0
+          fi
+          if command -v magick >/dev/null 2>&1 && magick "$ICON_SRC" -define icns:auto-resize=16,32,64,128,256,512 "$ICON_DEST"; then
+            echo "Generated macOS ICNS icon with ImageMagick"
+          else
+            echo "ImageMagick icns conversion failed, falling back to sips/iconutil" >&2
+            mkdir -p tmp.iconset
+            SIZES="16 32 128 256 512"
+            for SIZE in $SIZES; do
+              DOUBLE=$((SIZE * 2))
+              if ! sips -s format png -z $SIZE $SIZE "$ICON_SRC" --out tmp.iconset/icon_${SIZE}x${SIZE}.png; then
+                echo "Warning: failed to generate icon_${SIZE}x${SIZE}.png" >&2
+              fi
+              if ! sips -s format png -z $DOUBLE $DOUBLE "$ICON_SRC" --out tmp.iconset/icon_${SIZE}x${SIZE}@2x.png; then
+                echo "Warning: failed to generate icon_${SIZE}x${SIZE}@2x.png" >&2
+              fi
+            done
+            if iconutil -c icns tmp.iconset -o "$ICON_DEST"; then
+              echo "Generated macOS ICNS icon via sips/iconutil"
+            else
+              echo "Warning: macOS iconutil packaging failed; continuing without custom icon" >&2
+              rm -f "$ICON_DEST"
+            fi
+          fi
+        shell: bash
+
+      - name: Create jar
+        run: |
+          jar cfm RetroGame.jar release/MANIFEST.MF -C bin .
+      - name: Run jpackage (macOS)
+        run: |
+          ./release/macos/jpackage-unix.sh --icon release/macos/retro_rpg.icns
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installers
+          path: release/release-output
+
+  build-linux:
+    name: Build Linux installer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile
+        run: |
+          mkdir -p bin
+          find src -name "*.java" -print0 | xargs -0 javac -d bin
+      - name: Install ImageMagick
+        run: |
+          sudo apt-get update && sudo apt-get install -y imagemagick
+        shell: bash
+      - name: Generate Linux PNG icon
+        run: |
+          ICON_SRC="release/linux/retro_rpg.jpeg"
+          ICON_DEST="release/linux/retro_rpg.png"
+          if [ ! -f "$ICON_SRC" ]; then
+            echo "Icon source not found: $ICON_SRC" >&2
+            exit 0
+          fi
+          if convert "$ICON_SRC" -resize 512x512 "$ICON_DEST"; then
+            echo "Generated Linux icon at $ICON_DEST"
+          else
+            echo "Warning: Linux icon generation failed; continuing without custom icon" >&2
+            rm -f "$ICON_DEST"
+          fi
+        shell: bash
+
+      - name: Create jar
+        run: |
+          jar cfm RetroGame.jar release/MANIFEST.MF -C bin .
+      - name: Run jpackage (Linux)
+        run: |
+          ./release/linux/jpackage-unix.sh --icon release/linux/retro_rpg.png
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-installers
+          path: release/release-output
+  publish-release:
+    name: Publish release assets
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: nightly
+          name: Nightly Build
+          draft: false
+          prerelease: true
+          target_commitish: ${{ github.sha }}
+          files: release-artifacts/**
+          fail_on_unmatched_files: true
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

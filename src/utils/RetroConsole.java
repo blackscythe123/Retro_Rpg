@@ -8,6 +8,7 @@ import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JOptionPane;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
@@ -19,11 +20,20 @@ import java.awt.Font;
 import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GraphicsEnvironment;
 import java.awt.GridLayout;
 import java.awt.LayoutManager;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+import utils.AppDirectories;
 
 /**
  * Main application class for the Retro Gaming Console
@@ -44,6 +54,7 @@ public class RetroConsole extends JFrame {
     private static final Font HEADLINE_FONT = new Font("Poppins", Font.BOLD, 32);
     private static final Font SUBTITLE_FONT = new Font("SansSerif", Font.PLAIN, 16);
     private static final Font BODY_FONT = new Font("SansSerif", Font.PLAIN, 14);
+    private static final DateTimeFormatter LOG_TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private GamePanel gamePanel;
     private GamingConsole currentConsole;
     private JPanel controlPanel;
@@ -122,14 +133,18 @@ public class RetroConsole extends JFrame {
         tip.setFont(BODY_FONT);
         tip.setForeground(TEXT_SUBTLE);
 
-        JButton exitButton = createGhostButton("Exit");
-        exitButton.addActionListener(e -> System.exit(0));
+    JButton leaderboardButton = createGhostButton("Leaderboards");
+    leaderboardButton.addActionListener(e -> openLeaderboardHub());
+
+    JButton exitButton = createGhostButton("Exit");
+    exitButton.addActionListener(e -> System.exit(0));
 
         JPanel footer = new JPanel(new BorderLayout());
         footer.setOpaque(false);
         footer.add(tip, BorderLayout.CENTER);
-        JPanel exitWrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+    JPanel exitWrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         exitWrapper.setOpaque(false);
+    exitWrapper.add(leaderboardButton);
         exitWrapper.add(exitButton);
         footer.add(exitWrapper, BorderLayout.EAST);
 
@@ -245,6 +260,7 @@ public class RetroConsole extends JFrame {
         stopGameLoop();
         currentConsole = console;
         currentConsole.setSpeedProfile(activeSpeedProfile);
+        currentConsole.startTimer();
         gamePanel = new GamePanel(console);
     gamePanel.setPreferredSize(new Dimension(800, 600));
 
@@ -294,6 +310,13 @@ public class RetroConsole extends JFrame {
                     SwingUtilities.invokeLater(this::returnToMenu);
                     break;
                 }
+                if (console.isGameOver()) {
+                    // prompt to save score once
+                    SwingUtilities.invokeLater(() -> handlePostGame(console));
+                    // stop loop
+                    loopRunning = false;
+                    break;
+                }
 
                 try {
                     Thread.sleep(frameDelay);
@@ -303,6 +326,8 @@ public class RetroConsole extends JFrame {
                 }
             }
         }, "RetroConsole-Loop");
+        gameLoopThread.setUncaughtExceptionHandler((thread, throwable) ->
+                handleFatalException("Game loop", throwable));
         gameLoopThread.setDaemon(true);
         gameLoopThread.start();
     }
@@ -331,6 +356,7 @@ public class RetroConsole extends JFrame {
         if (currentConsole == null) return;
         currentConsole.reset();
         currentConsole.setSpeedProfile(activeSpeedProfile);
+        currentConsole.startTimer();
         updateStatusDisplay();
         SwingUtilities.invokeLater(() -> gamePanel.requestFocusInWindow());
     }
@@ -352,6 +378,70 @@ public class RetroConsole extends JFrame {
                 pauseButton.setText(currentConsole.isPaused() ? "Resume" : "Pause");
             }
         });
+    }
+
+    private void handlePostGame(GamingConsole console) {
+        try {
+            int finalScore = console.getScore();
+            long elapsed = console.getElapsedMillis();
+            String speedLabel = console.getSpeedProfile().toString();
+            String gameId = console.getClass().getSimpleName();
+            String gameLabel = readableGameName(gameId);
+
+            SaveScoreDialog saveDialog = new SaveScoreDialog(this, gameLabel, speedLabel, finalScore, formatElapsed(elapsed));
+            SaveScoreDialog.Result result = saveDialog.showDialogAndGetResult();
+
+            utils.Leaderboard lb = new utils.Leaderboard(gameId, speedLabel);
+            if (result.save) {
+                String playerName = result.name == null ? "" : result.name.trim();
+                if (playerName.isEmpty()) {
+                    playerName = "Player";
+                }
+                try {
+                    lb.addEntry(playerName, finalScore, elapsed);
+                } catch (java.io.IOException e) {
+                    JOptionPane.showMessageDialog(this, "Failed to save score: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+
+            showLeaderboardDialog(gameId, speedLabel);
+        } finally {
+            returnToMenu();
+        }
+    }
+
+    private void showLeaderboardDialog(String gameId, String speedLabel) {
+        utils.Leaderboard lb = new utils.Leaderboard(gameId, speedLabel);
+        java.util.List<utils.Leaderboard.Entry> top;
+        try {
+            top = lb.readTop(10);
+        } catch (java.io.IOException e) {
+            JOptionPane.showMessageDialog(this, "Failed to read leaderboard: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        LeaderboardDialog dialog = new LeaderboardDialog(this, readableGameName(gameId), speedLabel, top);
+        dialog.setVisible(true);
+    }
+
+    private String formatElapsed(long ms) {
+        long s = ms / 1000;
+        long mins = s / 60;
+        long secs = s % 60;
+        return String.format("%d:%02d", mins, secs);
+    }
+
+    private String readableGameName(String classSimpleName) {
+        switch (classSimpleName) {
+            case "SnakeConsole": return "Snake Redux";
+            case "FlappyBirdConsole": return "Flappy Bird Neo";
+            case "SpaceShooterConsole": return "Space Shooter Hyperdrive";
+            default: return classSimpleName;
+        }
+    }
+
+    private void openLeaderboardHub() {
+        LeaderboardHubDialog dialog = new LeaderboardHubDialog(this);
+        dialog.setVisible(true);
     }
 
     private void returnToMenu() {
@@ -399,8 +489,67 @@ public class RetroConsole extends JFrame {
         return button;
     }
 
+    private static void installGlobalExceptionHandler() {
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) ->
+                handleFatalException("Uncaught exception in " + thread.getName(), throwable));
+    }
+
+    private static void handleFatalException(String context, Throwable throwable) {
+        if (throwable == null) {
+            return;
+        }
+
+        File logFile = writeCrashLog(context, throwable);
+        String message = "Retro Game encountered a fatal error.\n" +
+                "Crash details were written to:\n" + (logFile != null ? logFile.getAbsolutePath() : "<console>");
+
+        if (GraphicsEnvironment.isHeadless()) {
+            System.err.println(message);
+            throwable.printStackTrace();
+            System.exit(1);
+            return;
+        }
+
+        Runnable dialogTask = () -> {
+            JOptionPane.showMessageDialog(null, message, "Retro Game Error", JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
+        };
+
+        if (SwingUtilities.isEventDispatchThread()) {
+            dialogTask.run();
+        } else {
+            SwingUtilities.invokeLater(dialogTask);
+        }
+    }
+
+    private static File writeCrashLog(String context, Throwable throwable) {
+        try {
+            File logFile = AppDirectories.getLogFile();
+            try (PrintWriter writer = new PrintWriter(new FileWriter(logFile, true))) {
+                writer.println("[" + LocalDateTime.now().format(LOG_TIMESTAMP) + "] " + context);
+                throwable.printStackTrace(writer);
+                writer.println();
+            }
+            return logFile;
+        } catch (IOException e) {
+            System.err.println("Failed to write crash log: " + e.getMessage());
+            throwable.printStackTrace();
+        }
+        return null;
+    }
+
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(RetroConsole::new);
+        installGlobalExceptionHandler();
+        Thread.currentThread().setUncaughtExceptionHandler((thread, throwable) ->
+                handleFatalException("Main thread", throwable));
+
+        SwingUtilities.invokeLater(() -> {
+            try {
+                new RetroConsole();
+            } catch (Throwable t) {
+                handleFatalException("UI initialization", t);
+            }
+        });
     }
 
     private static class GradientPanel extends JPanel {
