@@ -33,7 +33,15 @@ $jpackageArgs = @(
     "--app-version", "1.0",
     "--vendor", $Vendor,
     "--dest", $Dest,
+<<<<<<< HEAD
     "--type", "exe"
+=======
+    "--type", "exe",
+    "--win-per-user-install",
+    "--win-shortcut",
+    "--win-menu",
+    "--win-menu-group", $Vendor
+>>>>>>> c184fe7 (Add writable directories and improve crash handling)
 )
 
 # if icon exists in current windows folder, include it

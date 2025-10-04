@@ -20,11 +20,20 @@ import java.awt.Font;
 import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GraphicsEnvironment;
 import java.awt.GridLayout;
 import java.awt.LayoutManager;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+import utils.AppDirectories;
 
 /**
  * Main application class for the Retro Gaming Console
@@ -45,6 +54,7 @@ public class RetroConsole extends JFrame {
     private static final Font HEADLINE_FONT = new Font("Poppins", Font.BOLD, 32);
     private static final Font SUBTITLE_FONT = new Font("SansSerif", Font.PLAIN, 16);
     private static final Font BODY_FONT = new Font("SansSerif", Font.PLAIN, 14);
+    private static final DateTimeFormatter LOG_TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private GamePanel gamePanel;
     private GamingConsole currentConsole;
     private JPanel controlPanel;
@@ -316,6 +326,8 @@ public class RetroConsole extends JFrame {
                 }
             }
         }, "RetroConsole-Loop");
+        gameLoopThread.setUncaughtExceptionHandler((thread, throwable) ->
+                handleFatalException("Game loop", throwable));
         gameLoopThread.setDaemon(true);
         gameLoopThread.start();
     }
@@ -477,8 +489,67 @@ public class RetroConsole extends JFrame {
         return button;
     }
 
+    private static void installGlobalExceptionHandler() {
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) ->
+                handleFatalException("Uncaught exception in " + thread.getName(), throwable));
+    }
+
+    private static void handleFatalException(String context, Throwable throwable) {
+        if (throwable == null) {
+            return;
+        }
+
+        File logFile = writeCrashLog(context, throwable);
+        String message = "Retro Game encountered a fatal error.\n" +
+                "Crash details were written to:\n" + (logFile != null ? logFile.getAbsolutePath() : "<console>");
+
+        if (GraphicsEnvironment.isHeadless()) {
+            System.err.println(message);
+            throwable.printStackTrace();
+            System.exit(1);
+            return;
+        }
+
+        Runnable dialogTask = () -> {
+            JOptionPane.showMessageDialog(null, message, "Retro Game Error", JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
+        };
+
+        if (SwingUtilities.isEventDispatchThread()) {
+            dialogTask.run();
+        } else {
+            SwingUtilities.invokeLater(dialogTask);
+        }
+    }
+
+    private static File writeCrashLog(String context, Throwable throwable) {
+        try {
+            File logFile = AppDirectories.getLogFile();
+            try (PrintWriter writer = new PrintWriter(new FileWriter(logFile, true))) {
+                writer.println("[" + LocalDateTime.now().format(LOG_TIMESTAMP) + "] " + context);
+                throwable.printStackTrace(writer);
+                writer.println();
+            }
+            return logFile;
+        } catch (IOException e) {
+            System.err.println("Failed to write crash log: " + e.getMessage());
+            throwable.printStackTrace();
+        }
+        return null;
+    }
+
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(RetroConsole::new);
+        installGlobalExceptionHandler();
+        Thread.currentThread().setUncaughtExceptionHandler((thread, throwable) ->
+                handleFatalException("Main thread", throwable));
+
+        SwingUtilities.invokeLater(() -> {
+            try {
+                new RetroConsole();
+            } catch (Throwable t) {
+                handleFatalException("UI initialization", t);
+            }
+        });
     }
 
     private static class GradientPanel extends JPanel {

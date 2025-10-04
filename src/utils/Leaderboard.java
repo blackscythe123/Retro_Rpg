@@ -13,6 +13,11 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 
+<<<<<<< HEAD
+=======
+import utils.AppDirectories;
+
+>>>>>>> c184fe7 (Add writable directories and improve crash handling)
 /**
  * Simple leaderboard persisted as CSV files in release/ directory.
  * CSV columns: name,score,elapsedMillis,timestamp
@@ -40,6 +45,7 @@ public class Leaderboard {
     public Leaderboard(String gameId, String speedLabel) {
         this.gameId = sanitize(gameId);
         this.speedLabel = sanitize(speedLabel);
+<<<<<<< HEAD
         File storageDir = resolveStorageDirectory();
         if (!storageDir.exists() && !storageDir.mkdirs()) {
             storageDir = new File("leaderboards");
@@ -71,6 +77,13 @@ public class Leaderboard {
 
         return new File("leaderboards");
     }
+=======
+        File storageDir = AppDirectories.getLeaderboardsDirectory();
+        this.file = new File(storageDir, String.format("leaderboards-%s-%s.csv", this.gameId, this.speedLabel));
+    }
+
+    
+>>>>>>> c184fe7 (Add writable directories and improve crash handling)
 
     private String sanitize(String s) {
         return s.replaceAll("[^a-zA-Z0-9_-]", "_");
