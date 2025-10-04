@@ -10,7 +10,10 @@ import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
+import java.util.List;
 import java.util.Locale;
 import java.util.Random;
 
@@ -161,13 +164,66 @@ public class SnakeConsole extends GamingConsole {
     }
 
     private void spawnObstacle() {
+        final int cellSize = 20;
+        List<int[]> candidates = new ArrayList<>();
+
+        int[] head = snake.getBody().getFirst();
+        int headX = snapToGrid(head[0]);
+        int headY = snapToGrid(head[1]);
+
+        int[][] directionVectors = {
+                {0, -cellSize},
+                {cellSize, 0},
+                {0, cellSize},
+                {-cellSize, 0}
+        };
+        int directionIndex = Math.max(0, Math.min(3, snake.getDirection()));
+        int[] forward = directionVectors[directionIndex];
+        int[] left = new int[]{-forward[1], forward[0]};
+        int[] right = new int[]{forward[1], -forward[0]};
+
+        for (int step = 2; step <= 6; step++) {
+            int baseX = headX + forward[0] * step;
+            int baseY = headY + forward[1] * step;
+            addCandidate(candidates, baseX, baseY);
+            addCandidate(candidates, baseX + left[0], baseY + left[1]);
+            addCandidate(candidates, baseX + right[0], baseY + right[1]);
+        }
+
+        int bodySamples = Math.min(10, snake.getBody().size());
+        for (int i = 2; i < bodySamples; i += 2) {
+            int[] segment = snake.getBody().get(i);
+            int segX = snapToGrid(segment[0]);
+            int segY = snapToGrid(segment[1]);
+            addCandidate(candidates, segX + forward[0], segY + forward[1]);
+            addCandidate(candidates, segX + left[0], segY + left[1]);
+            addCandidate(candidates, segX + right[0], segY + right[1]);
+        }
+
+        Collections.shuffle(candidates, random);
+        for (int[] candidate : candidates) {
+            if (canPlaceObstacleAt(candidate[0], candidate[1])) {
+                placeObstacle(candidate[0], candidate[1]);
+                return;
+            }
+        }
+
+        for (int attempts = 0; attempts < 25; attempts++) {
+            int offsetX = (random.nextInt(7) - 3) * cellSize;
+            int offsetY = (random.nextInt(7) - 3) * cellSize;
+            int x = snapToGrid(head[0] + offsetX);
+            int y = snapToGrid(head[1] + offsetY);
+            if (canPlaceObstacleAt(x, y)) {
+                placeObstacle(x, y);
+                return;
+            }
+        }
+
         for (int attempts = 0; attempts < 40; attempts++) {
-            int x = random.nextInt(38) * 20;
-            int y = random.nextInt(28) * 20;
-            if (!isPositionOccupied(x, y)) {
-                SnakeObstacle obstacle = new SnakeObstacle(x, y);
-                obstacles.add(obstacle);
-                gameObjects.add(obstacle);
+            int x = random.nextInt(38) * cellSize;
+            int y = random.nextInt(28) * cellSize;
+            if (canPlaceObstacleAt(x, y)) {
+                placeObstacle(x, y);
                 return;
             }
         }
@@ -383,5 +439,47 @@ public class SnakeConsole extends GamingConsole {
     @Override
     protected void onSpeedProfileChanged(GameSpeedProfile newProfile) {
         updateActiveSpeed();
+    }
+
+    private void addCandidate(List<int[]> candidates, int x, int y) {
+        if (isWithinBounds(x, y)) {
+            candidates.add(new int[]{x, y});
+        }
+    }
+
+    private boolean canPlaceObstacleAt(int x, int y) {
+        return isWithinBounds(x, y) && !isSnakeSegmentAt(x, y) && !isPositionOccupied(x, y);
+    }
+
+    private boolean isWithinBounds(int x, int y) {
+        return x >= 0 && x <= 780 && y >= 0 && y <= 580;
+    }
+
+    private boolean isSnakeSegmentAt(int x, int y) {
+        for (int[] segment : snake.getBody()) {
+            if (x < segment[0] + 20 && x + 20 > segment[0] &&
+                y < segment[1] + 20 && y + 20 > segment[1]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private int snapToGrid(int value) {
+        int cellSize = 20;
+        int snapped = ((value + cellSize / 2) / cellSize) * cellSize;
+        if (snapped < 0) {
+            return 0;
+        }
+        if (snapped > 780) {
+            return 780;
+        }
+        return snapped;
+    }
+
+    private void placeObstacle(int x, int y) {
+        SnakeObstacle obstacle = new SnakeObstacle(x, y);
+        obstacles.add(obstacle);
+        gameObjects.add(obstacle);
     }
 }
