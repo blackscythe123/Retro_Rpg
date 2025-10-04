@@ -36,7 +36,27 @@ if (Test-Path $iconPath) {
     Write-Host "No Windows icon found at: $iconPath (optional)"
 }
 
-Write-Host "Running jpackage with args:`n$jpackageArgs"
-$jpackage @jpackageArgs
+Write-Host "Running jpackage with args:" -ForegroundColor Cyan
+$jpackageArgs | ForEach-Object { Write-Host "  $_" }
+
+$processInfo = New-Object System.Diagnostics.ProcessStartInfo
+$processInfo.FileName = $jpackage
+$processInfo.RedirectStandardOutput = $true
+$processInfo.RedirectStandardError = $true
+$processInfo.UseShellExecute = $false
+$processInfo.Arguments = ($jpackageArgs -join ' ')
+
+$process = [System.Diagnostics.Process]::Start($processInfo)
+$process.WaitForExit()
+
+if ($process.ExitCode -ne 0) {
+    Write-Error "jpackage exited with code $($process.ExitCode)"
+    Write-Host $process.StandardOutput.ReadToEnd()
+    Write-Host $process.StandardError.ReadToEnd()
+    exit $process.ExitCode
+}
+
+Write-Host $process.StandardOutput.ReadToEnd()
+Write-Host $process.StandardError.ReadToEnd()
 
 Write-Host "Done. Output in: $Dest"
