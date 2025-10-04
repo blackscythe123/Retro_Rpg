@@ -163,7 +163,6 @@ jobs:
     name: Publish release assets
     needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
     steps:
       - uses: actions/checkout@v4
       - name: Download artifacts
@@ -172,6 +171,7 @@ jobs:
           path: release-artifacts
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v1
+        if: github.event_name == 'release'
         with:
           files: release-artifacts/**
         env:
