@@ -45,7 +45,7 @@ jobs:
       - name: Run jpackage (Windows)
         run: |
           cd release\windows
-          pwsh -File .\jpackage-windows.ps1 -Input ..\bin -MainJar ..\RetroGame.jar -MainClass utils.RetroConsole -Name RetroGame -Dest ..\release-output
+          pwsh -File .\jpackage-windows.ps1 -MainJar ..\..\RetroGame.jar -MainClass utils.RetroConsole -Name RetroGame -Dest ..\release-output
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
