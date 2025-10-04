@@ -19,6 +19,7 @@ public abstract class GamingConsole implements Drawable, Updatable {
     protected boolean exitToMenu;
     protected int score;
     protected GameSpeedProfile speedProfile;
+    protected long startTimeMillis = 0L;
 
     public GamingConsole() {
         gameObjects = new GameObjectList<>();
@@ -28,6 +29,28 @@ public abstract class GamingConsole implements Drawable, Updatable {
         score = 0;
         speedProfile = GameSpeedProfile.RELAXED;
         initializeGame();
+    }
+
+    /**
+     * Start internal timer for measuring elapsed time during a match.
+     */
+    public void startTimer() {
+        this.startTimeMillis = System.currentTimeMillis();
+    }
+
+    /**
+     * Reset or stop the timer.
+     */
+    public void resetTimer() {
+        this.startTimeMillis = 0L;
+    }
+
+    /**
+     * Returns elapsed milliseconds since startTimer() was called, or 0 if timer not started.
+     */
+    public long getElapsedMillis() {
+        if (startTimeMillis == 0L) return 0L;
+        return System.currentTimeMillis() - startTimeMillis;
     }
 
     public enum GameSpeedProfile {
@@ -191,6 +214,7 @@ public abstract class GamingConsole implements Drawable, Updatable {
         paused = false;
         exitToMenu = false;
         score = 0;
+        resetTimer();
         initializeGame();
     }
 

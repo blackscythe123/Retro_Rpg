@@ -8,6 +8,7 @@ import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JOptionPane;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
@@ -122,14 +123,18 @@ public class RetroConsole extends JFrame {
         tip.setFont(BODY_FONT);
         tip.setForeground(TEXT_SUBTLE);
 
-        JButton exitButton = createGhostButton("Exit");
-        exitButton.addActionListener(e -> System.exit(0));
+    JButton leaderboardButton = createGhostButton("Leaderboards");
+    leaderboardButton.addActionListener(e -> openLeaderboardHub());
+
+    JButton exitButton = createGhostButton("Exit");
+    exitButton.addActionListener(e -> System.exit(0));
 
         JPanel footer = new JPanel(new BorderLayout());
         footer.setOpaque(false);
         footer.add(tip, BorderLayout.CENTER);
-        JPanel exitWrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+    JPanel exitWrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         exitWrapper.setOpaque(false);
+    exitWrapper.add(leaderboardButton);
         exitWrapper.add(exitButton);
         footer.add(exitWrapper, BorderLayout.EAST);
 
@@ -245,6 +250,7 @@ public class RetroConsole extends JFrame {
         stopGameLoop();
         currentConsole = console;
         currentConsole.setSpeedProfile(activeSpeedProfile);
+        currentConsole.startTimer();
         gamePanel = new GamePanel(console);
     gamePanel.setPreferredSize(new Dimension(800, 600));
 
@@ -294,6 +300,13 @@ public class RetroConsole extends JFrame {
                     SwingUtilities.invokeLater(this::returnToMenu);
                     break;
                 }
+                if (console.isGameOver()) {
+                    // prompt to save score once
+                    SwingUtilities.invokeLater(() -> handlePostGame(console));
+                    // stop loop
+                    loopRunning = false;
+                    break;
+                }
 
                 try {
                     Thread.sleep(frameDelay);
@@ -331,6 +344,7 @@ public class RetroConsole extends JFrame {
         if (currentConsole == null) return;
         currentConsole.reset();
         currentConsole.setSpeedProfile(activeSpeedProfile);
+        currentConsole.startTimer();
         updateStatusDisplay();
         SwingUtilities.invokeLater(() -> gamePanel.requestFocusInWindow());
     }
@@ -352,6 +366,70 @@ public class RetroConsole extends JFrame {
                 pauseButton.setText(currentConsole.isPaused() ? "Resume" : "Pause");
             }
         });
+    }
+
+    private void handlePostGame(GamingConsole console) {
+        try {
+            int finalScore = console.getScore();
+            long elapsed = console.getElapsedMillis();
+            String speedLabel = console.getSpeedProfile().toString();
+            String gameId = console.getClass().getSimpleName();
+            String gameLabel = readableGameName(gameId);
+
+            SaveScoreDialog saveDialog = new SaveScoreDialog(this, gameLabel, speedLabel, finalScore, formatElapsed(elapsed));
+            SaveScoreDialog.Result result = saveDialog.showDialogAndGetResult();
+
+            utils.Leaderboard lb = new utils.Leaderboard(gameId, speedLabel);
+            if (result.save) {
+                String playerName = result.name == null ? "" : result.name.trim();
+                if (playerName.isEmpty()) {
+                    playerName = "Player";
+                }
+                try {
+                    lb.addEntry(playerName, finalScore, elapsed);
+                } catch (java.io.IOException e) {
+                    JOptionPane.showMessageDialog(this, "Failed to save score: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+
+            showLeaderboardDialog(gameId, speedLabel);
+        } finally {
+            returnToMenu();
+        }
+    }
+
+    private void showLeaderboardDialog(String gameId, String speedLabel) {
+        utils.Leaderboard lb = new utils.Leaderboard(gameId, speedLabel);
+        java.util.List<utils.Leaderboard.Entry> top;
+        try {
+            top = lb.readTop(10);
+        } catch (java.io.IOException e) {
+            JOptionPane.showMessageDialog(this, "Failed to read leaderboard: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        LeaderboardDialog dialog = new LeaderboardDialog(this, readableGameName(gameId), speedLabel, top);
+        dialog.setVisible(true);
+    }
+
+    private String formatElapsed(long ms) {
+        long s = ms / 1000;
+        long mins = s / 60;
+        long secs = s % 60;
+        return String.format("%d:%02d", mins, secs);
+    }
+
+    private String readableGameName(String classSimpleName) {
+        switch (classSimpleName) {
+            case "SnakeConsole": return "Snake Redux";
+            case "FlappyBirdConsole": return "Flappy Bird Neo";
+            case "SpaceShooterConsole": return "Space Shooter Hyperdrive";
+            default: return classSimpleName;
+        }
+    }
+
+    private void openLeaderboardHub() {
+        LeaderboardHubDialog dialog = new LeaderboardHubDialog(this);
+        dialog.setVisible(true);
     }
 
     private void returnToMenu() {

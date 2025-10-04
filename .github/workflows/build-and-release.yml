@@ -1,0 +1,142 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main, master,test]
+  release:
+    types: [published]
+
+jobs:
+  build-windows:
+    name: Build Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile
+        run: |
+          javac -d bin $(Get-ChildItem -Recurse -Filter *.java | ForEach-Object { $_.FullName } )
+      - name: Install ImageMagick (Choco)
+        run: |
+          choco install imagemagick -y
+        shell: powershell
+      - name: Generate Windows icon
+        run: |
+          cd release\windows
+          magick convert ..\..\retro_rpg.jpeg -resize 256x256 .\retro_rpg.ico
+        shell: powershell
+
+      - name: Create jar
+        run: |
+          cd release\windows
+          .\build-jar.bat
+      - name: Run jpackage (Windows)
+        run: |
+          cd release\windows
+          pwsh -File .\jpackage-windows.ps1 -Input ..\bin -MainJar ..\RetroGame.jar -MainClass utils.RetroConsole -Name RetroGame -Dest ..\release-output
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: release\release-output
+
+  build-macos:
+    name: Build macOS installer
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile
+        run: |
+          mkdir -p bin
+          find src -name "*.java" -print0 | xargs -0 javac -d bin
+      - name: Install ImageMagick
+        run: |
+          brew install imagemagick
+        shell: bash
+      - name: Generate macOS icon (.icns)
+        run: |
+          mkdir -p tmp.iconset
+          sips -z 16 16   retro_rpg.jpeg --out tmp.iconset/icon_16x16.png
+          sips -z 32 32   retro_rpg.jpeg --out tmp.iconset/icon_16x16@2x.png
+          sips -z 32 32   retro_rpg.jpeg --out tmp.iconset/icon_32x32.png
+          sips -z 64 64   retro_rpg.jpeg --out tmp.iconset/icon_32x32@2x.png
+          sips -z 128 128 retro_rpg.jpeg --out tmp.iconset/icon_128x128.png
+          sips -z 256 256 retro_rpg.jpeg --out tmp.iconset/icon_128x128@2x.png
+          sips -z 256 256 retro_rpg.jpeg --out tmp.iconset/icon_256x256.png
+          sips -z 512 512 retro_rpg.jpeg --out tmp.iconset/icon_256x256@2x.png
+          sips -z 512 512 retro_rpg.jpeg --out tmp.iconset/icon_512x512.png
+          iconutil -c icns tmp.iconset -o release/macos/retro_rpg.icns
+        shell: bash
+
+      - name: Create jar
+        run: |
+          jar cfm RetroGame.jar release/MANIFEST.MF -C bin .
+      - name: Run jpackage (macOS)
+        run: |
+          ./release/macos/jpackage-unix.sh --icon release/macos/retro_rpg.icns
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installers
+          path: release/release-output
+
+  build-linux:
+    name: Build Linux installer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile
+        run: |
+          mkdir -p bin
+          find src -name "*.java" -print0 | xargs -0 javac -d bin
+      - name: Install ImageMagick
+        run: |
+          sudo apt-get update && sudo apt-get install -y imagemagick
+        shell: bash
+      - name: Generate Linux PNG icon
+        run: |
+          magick convert retro_rpg.jpeg -resize 512x512 release/linux/retro_rpg.png
+        shell: bash
+
+      - name: Create jar
+        run: |
+          jar cfm RetroGame.jar release/MANIFEST.MF -C bin .
+      - name: Run jpackage (Linux)
+        run: |
+          ./release/linux/jpackage-unix.sh --icon release/linux/retro_rpg.png
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-installers
+          path: release/release-output
+  publish-release:
+    name: Publish release assets
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-artifacts/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
