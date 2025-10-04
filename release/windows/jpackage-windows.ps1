@@ -50,24 +50,30 @@ $jpackageArgs | ForEach-Object { Write-Host "  $_" }
 
 $processInfo = New-Object System.Diagnostics.ProcessStartInfo
 $processInfo.FileName = $jpackage
+$quotedArgs = $jpackageArgs | ForEach-Object {
+    if ($_ -match '\s') {
+        '"{0}"' -f $_
+    } else {
+        $_
+    }
+}
+$processInfo.Arguments = [string]::Join(' ', $quotedArgs)
 $processInfo.RedirectStandardOutput = $true
 $processInfo.RedirectStandardError = $true
 $processInfo.UseShellExecute = $false
-foreach ($arg in $jpackageArgs) {
-    [void]$processInfo.ArgumentList.Add($arg)
-}
 
 $process = [System.Diagnostics.Process]::Start($processInfo)
 $process.WaitForExit()
 
+$stdOut = $process.StandardOutput.ReadToEnd()
+$stdErr = $process.StandardError.ReadToEnd()
+
+if ($stdOut) { Write-Host $stdOut }
+if ($stdErr) { Write-Host $stdErr }
+
 if ($process.ExitCode -ne 0) {
     Write-Error "jpackage exited with code $($process.ExitCode)"
-    Write-Host $process.StandardOutput.ReadToEnd()
-    Write-Host $process.StandardError.ReadToEnd()
     exit $process.ExitCode
 }
-
-Write-Host $process.StandardOutput.ReadToEnd()
-Write-Host $process.StandardError.ReadToEnd()
 
 Write-Host "Done. Output in: $Dest"

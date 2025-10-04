@@ -24,6 +24,10 @@ jobs:
         run: |
           choco install imagemagick -y
         shell: powershell
+      - name: Install WiX Toolset
+        run: |
+          choco install wixtoolset --version=3.11.2 -y
+        shell: powershell
       - name: Generate Windows icon
         run: |
           cd release\windows

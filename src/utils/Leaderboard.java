@@ -40,9 +40,36 @@ public class Leaderboard {
     public Leaderboard(String gameId, String speedLabel) {
         this.gameId = sanitize(gameId);
         this.speedLabel = sanitize(speedLabel);
-        File releaseDir = new File("release");
-        if (!releaseDir.exists()) releaseDir.mkdirs();
-        this.file = new File(releaseDir, String.format("leaderboards-%s-%s.csv", this.gameId, this.speedLabel));
+        File storageDir = resolveStorageDirectory();
+        if (!storageDir.exists() && !storageDir.mkdirs()) {
+            storageDir = new File("leaderboards");
+            if (!storageDir.exists()) {
+                storageDir.mkdirs();
+            }
+        }
+        this.file = new File(storageDir, String.format("leaderboards-%s-%s.csv", this.gameId, this.speedLabel));
+    }
+
+    private File resolveStorageDirectory() {
+        String override = System.getenv("RETRO_RPG_DATA_DIR");
+        if (override != null && !override.trim().isEmpty()) {
+            return new File(override.trim());
+        }
+
+        String os = System.getProperty("os.name", "").toLowerCase();
+        if (os.contains("win")) {
+            String localAppData = System.getenv("LOCALAPPDATA");
+            if (localAppData != null && !localAppData.isEmpty()) {
+                return new File(localAppData, "RetroGame\\leaderboards");
+            }
+        }
+
+        String userHome = System.getProperty("user.home");
+        if (userHome != null && !userHome.isEmpty()) {
+            return new File(userHome, ".retro_game/leaderboards");
+        }
+
+        return new File("leaderboards");
     }
 
     private String sanitize(String s) {
