@@ -1,5 +1,4 @@
 param(
-    [string]$Input = "..\bin",
     [string]$MainJar = "..\RetroGame.jar",
     [string]$MainClass = "utils.RetroConsole",
     [string]$Name = "RetroGame",
@@ -16,9 +15,16 @@ if (-not (Get-Command $jpackage -ErrorAction SilentlyContinue)) {
 
 New-Item -ItemType Directory -Force -Path $Dest | Out-Null
 
+$mainJarPath = Resolve-Path $MainJar -ErrorAction Stop
+$mainJarName = Split-Path -Path $mainJarPath -Leaf
+
+$stagingInput = Join-Path -Path (Resolve-Path $Dest).Path -ChildPath "windows-input"
+New-Item -ItemType Directory -Force -Path $stagingInput | Out-Null
+Copy-Item -Force $mainJarPath -Destination (Join-Path -Path $stagingInput -ChildPath $mainJarName)
+
 $jpackageArgs = @(
-    "--input", $Input,
-    "--main-jar", $MainJar,
+    "--input", $stagingInput,
+    "--main-jar", $mainJarName,
     "--main-class", $MainClass,
     "--name", $Name,
     "--app-version", "1.0",
@@ -44,7 +50,19 @@ $processInfo.FileName = $jpackage
 $processInfo.RedirectStandardOutput = $true
 $processInfo.RedirectStandardError = $true
 $processInfo.UseShellExecute = $false
-$processInfo.Arguments = ($jpackageArgs -join ' ')
+
+$escapedArgs = $jpackageArgs | ForEach-Object {
+    $arg = $_.ToString()
+    if ($arg -match '"') {
+        $arg = $arg.Replace('"', '\"')
+    }
+    if ($arg -match '\s') {
+        '"{0}"' -f $arg
+    } else {
+        $arg
+    }
+}
+$processInfo.Arguments = ($escapedArgs -join ' ')
 
 $process = [System.Diagnostics.Process]::Start($processInfo)
 $process.WaitForExit()
