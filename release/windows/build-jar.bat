@@ -12,7 +12,10 @@ jar cfm "%JAR_NAME%" "..\MANIFEST.MF" -C ..\bin .
 if errorlevel 1 goto JAR_FAILED
 
 echo Created %JAR_NAME% in project root.
+if /I "%CI%"=="true" goto CI_EXIT
 pause
+
+:CI_EXIT
 endlocal
 goto :EOF
 
