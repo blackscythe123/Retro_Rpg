@@ -3,12 +3,12 @@ REM Build a runnable jar using the project's compiled classes in bin\
 setlocal
 set JAR_NAME=RetroGame.jar
 
-if not exist ..\bin goto NO_BIN
+if not exist ..\..\bin goto NO_BIN
 
-if exist "..\%JAR_NAME%" del "..\%JAR_NAME%"
+if exist "..\..\%JAR_NAME%" del "..\..\%JAR_NAME%"
 
 REM Create jar: c=create, f=file, m=manifest
-jar cfm "..\%JAR_NAME%" "..\MANIFEST.MF" -C ..\bin .
+jar cfm "..\..\%JAR_NAME%" "..\MANIFEST.MF" -C ..\..\bin .
 if errorlevel 1 goto JAR_FAILED
 
 echo Created %JAR_NAME% in project root.

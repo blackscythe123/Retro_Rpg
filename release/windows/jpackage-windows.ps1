@@ -1,5 +1,5 @@
 param(
-    [string]$MainJar = "..\RetroGame.jar",
+    [string]$MainJar = "..\..\RetroGame.jar",
     [string]$MainClass = "utils.RetroConsole",
     [string]$Name = "RetroGame",
     [string]$Vendor = "RetroRpg",
@@ -19,6 +19,9 @@ $mainJarPath = Resolve-Path $MainJar -ErrorAction Stop
 $mainJarName = Split-Path -Path $mainJarPath -Leaf
 
 $stagingInput = Join-Path -Path (Resolve-Path $Dest).Path -ChildPath "windows-input"
+if (Test-Path $stagingInput) {
+    Remove-Item -Recurse -Force $stagingInput
+}
 New-Item -ItemType Directory -Force -Path $stagingInput | Out-Null
 Copy-Item -Force $mainJarPath -Destination (Join-Path -Path $stagingInput -ChildPath $mainJarName)
 
@@ -50,19 +53,9 @@ $processInfo.FileName = $jpackage
 $processInfo.RedirectStandardOutput = $true
 $processInfo.RedirectStandardError = $true
 $processInfo.UseShellExecute = $false
-
-$escapedArgs = $jpackageArgs | ForEach-Object {
-    $arg = $_.ToString()
-    if ($arg -match '"') {
-        $arg = $arg.Replace('"', '\"')
-    }
-    if ($arg -match '\s') {
-        '"{0}"' -f $arg
-    } else {
-        $arg
-    }
+foreach ($arg in $jpackageArgs) {
+    [void]$processInfo.ArgumentList.Add($arg)
 }
-$processInfo.Arguments = ($escapedArgs -join ' ')
 
 $process = [System.Diagnostics.Process]::Start($processInfo)
 $process.WaitForExit()
