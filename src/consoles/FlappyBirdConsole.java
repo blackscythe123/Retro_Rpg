@@ -15,6 +15,7 @@ import java.awt.Graphics2D;
 import java.awt.RadialGradientPaint;
 import java.awt.RenderingHints;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
 import java.awt.geom.GeneralPath;
 import java.awt.geom.Point2D;
 import java.util.Locale;
@@ -99,6 +100,13 @@ public class FlappyBirdConsole extends GamingConsole {
     @Override
     public void handleKeyRelease(int keyCode) {
         // No key release behaviour needed
+    }
+
+    @Override
+    public void handleMousePressed(int button, int x, int y) {
+        if (button == MouseEvent.BUTTON1) {
+            bird.jump();
+        }
     }
 
     @Override
@@ -404,9 +412,9 @@ public class FlappyBirdConsole extends GamingConsole {
             statusY += 18;
         }
 
-    g2d.setColor(new Color(240, 240, 240));
-    g2d.setFont(new Font("Arial", Font.PLAIN, 14));
-    g2d.drawString("SPACE/UP: Flap | P: Pause | R: Restart | ESC: Exit", 20, FIELD_HEIGHT - 24);
+        g2d.setColor(new Color(240, 240, 240));
+        g2d.setFont(new Font("Arial", Font.PLAIN, 14));
+        g2d.drawString("SPACE or LEFT CLICK / UP: Flap | P: Pause | R: Restart | ESC: Exit", 20, FIELD_HEIGHT - 24);
 
         if (bannerTimer > 0 && bannerText != null && !bannerText.isEmpty()) {
             g2d.setFont(new Font("Arial", Font.BOLD, 26));

@@ -17,6 +17,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
 import java.util.Locale;
 import java.util.Random;
 
@@ -134,6 +135,20 @@ public class SpaceShooterConsole extends GamingConsole {
             case KeyEvent.VK_SPACE:
                 firing = false;
                 break;
+        }
+    }
+
+    @Override
+    public void handleMousePressed(int button, int x, int y) {
+        if (button == MouseEvent.BUTTON1) {
+            firing = true;
+        }
+    }
+
+    @Override
+    public void handleMouseReleased(int button, int x, int y) {
+        if (button == MouseEvent.BUTTON1) {
+            firing = false;
         }
     }
 
@@ -776,7 +791,7 @@ public class SpaceShooterConsole extends GamingConsole {
 
         g2d.setColor(new Color(220, 220, 220));
         g2d.setFont(new Font("Arial", Font.PLAIN, 14));
-        g2d.drawString("MOVE: Arrow Keys / WASD | FIRE: SPACE | P: Pause | R: Restart | ESC: Exit", 20, FIELD_HEIGHT - 20);
+    g2d.drawString("MOVE: Arrow Keys / WASD | FIRE: SPACE or LEFT CLICK | P: Pause | R: Restart | ESC: Exit", 20, FIELD_HEIGHT - 20);
 
         if (bannerTimer > 0 && bannerText != null && !bannerText.isEmpty()) {
             g2d.setFont(new Font("Arial", Font.BOLD, 24));

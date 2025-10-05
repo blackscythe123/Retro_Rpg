@@ -21,8 +21,11 @@ import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GraphicsEnvironment;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.LayoutManager;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -61,23 +64,38 @@ public class RetroConsole extends JFrame {
     private JButton pauseButton;
     private JButton restartButton;
     private JButton menuButton;
+    private JButton fullscreenButton;
     private JComboBox<GamingConsole.GameSpeedProfile> speedSelect;
     private JLabel statusLabel;
     private Thread gameLoopThread;
     private volatile boolean loopRunning;
     private GamingConsole.GameSpeedProfile activeSpeedProfile = GamingConsole.GameSpeedProfile.RELAXED;
+    private boolean fullscreenActive = false;
+    private Rectangle windowedBounds;
+    private int windowedState = JFrame.NORMAL;
 
     public RetroConsole() {
         setTitle("Retro Gaming Console");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(800, 730);
         setLocationRelativeTo(null);
-        setResizable(false);
+        setResizable(true);
+        setMinimumSize(new Dimension(820, 720));
 
         setLayout(new BorderLayout());
         createMenu();
 
+        addWindowStateListener(e -> {
+            boolean maximized = (e.getNewState() & JFrame.MAXIMIZED_BOTH) == JFrame.MAXIMIZED_BOTH;
+            if (!maximized) {
+                windowedBounds = getBounds();
+                windowedState = e.getNewState();
+            }
+            updateFullscreenState(maximized);
+        });
+
         setVisible(true);
+        windowedBounds = getBounds();
     }
 
     private void createMenu() {
@@ -204,12 +222,15 @@ public class RetroConsole extends JFrame {
 
         restartButton = createGhostButton("Restart");
         restartButton.addActionListener(e -> restartCurrentGame());
+    fullscreenButton = createGhostButton("Fullscreen");
+    fullscreenButton.addActionListener(e -> toggleFullscreen());
 
-        menuButton = createPrimaryButton("Main Menu");
-        menuButton.addActionListener(e -> returnToMenu());
+    menuButton = createPrimaryButton("Main Menu");
+    menuButton.addActionListener(e -> returnToMenu());
 
         buttonRow.add(pauseButton);
         buttonRow.add(restartButton);
+    buttonRow.add(fullscreenButton);
         buttonRow.add(menuButton);
 
         JPanel centerRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0));
@@ -253,6 +274,7 @@ public class RetroConsole extends JFrame {
         panel.add(buttonRow, BorderLayout.WEST);
         panel.add(centerRow, BorderLayout.CENTER);
         panel.add(statusLabel, BorderLayout.EAST);
+        updateFullscreenState(fullscreenActive);
         return panel;
     }
 
@@ -262,11 +284,19 @@ public class RetroConsole extends JFrame {
         currentConsole.setSpeedProfile(activeSpeedProfile);
         currentConsole.startTimer();
         gamePanel = new GamePanel(console);
-    gamePanel.setPreferredSize(new Dimension(800, 600));
+        gamePanel.setPreferredSize(new Dimension(800, 600));
+        gamePanel.setMinimumSize(new Dimension(800, 600));
+        gamePanel.setMaximumSize(new Dimension(800, 600));
 
         JPanel container = new JPanel(new BorderLayout());
         container.setBackground(Color.BLACK);
-        container.add(gamePanel, BorderLayout.CENTER);
+        JPanel stageWrapper = new JPanel(new GridBagLayout());
+        stageWrapper.setOpaque(false);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        stageWrapper.add(gamePanel, gbc);
+        container.add(stageWrapper, BorderLayout.CENTER);
         controlPanel = createControlPanel();
     JPanel hudWrapper = new JPanel(new BorderLayout());
     hudWrapper.setBackground(new Color(10, 12, 28));
@@ -281,6 +311,8 @@ public class RetroConsole extends JFrame {
         setContentPane(container);
         revalidate();
         repaint();
+
+        updateFullscreenState((getExtendedState() & JFrame.MAXIMIZED_BOTH) == JFrame.MAXIMIZED_BOTH);
 
         startGameLoop(console);
         SwingUtilities.invokeLater(() -> gamePanel.requestFocusInWindow());
@@ -381,32 +413,67 @@ public class RetroConsole extends JFrame {
     }
 
     private void handlePostGame(GamingConsole console) {
-        try {
-            int finalScore = console.getScore();
-            long elapsed = console.getElapsedMillis();
-            String speedLabel = console.getSpeedProfile().toString();
-            String gameId = console.getClass().getSimpleName();
-            String gameLabel = readableGameName(gameId);
+        int finalScore = console.getScore();
+        long elapsed = console.getElapsedMillis();
+        String speedLabel = console.getSpeedProfile().toString();
+        String gameId = console.getClass().getSimpleName();
+        String gameLabel = readableGameName(gameId);
 
-            SaveScoreDialog saveDialog = new SaveScoreDialog(this, gameLabel, speedLabel, finalScore, formatElapsed(elapsed));
-            SaveScoreDialog.Result result = saveDialog.showDialogAndGetResult();
+        SaveScoreDialog saveDialog = new SaveScoreDialog(this, gameLabel, speedLabel, finalScore, formatElapsed(elapsed));
+        SaveScoreDialog.Result result = saveDialog.showDialogAndGetResult();
 
-            utils.Leaderboard lb = new utils.Leaderboard(gameId, speedLabel);
-            if (result.save) {
-                String playerName = result.name == null ? "" : result.name.trim();
-                if (playerName.isEmpty()) {
-                    playerName = "Player";
-                }
-                try {
-                    lb.addEntry(playerName, finalScore, elapsed);
-                } catch (java.io.IOException e) {
-                    JOptionPane.showMessageDialog(this, "Failed to save score: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                }
+        utils.Leaderboard lb = new utils.Leaderboard(gameId, speedLabel);
+        if (result.save) {
+            String playerName = result.name == null ? "" : result.name.trim();
+            if (playerName.isEmpty()) {
+                playerName = "Player";
             }
+            try {
+                lb.addEntry(playerName, finalScore, elapsed);
+            } catch (java.io.IOException e) {
+                JOptionPane.showMessageDialog(this, "Failed to save score: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
 
-            showLeaderboardDialog(gameId, speedLabel);
-        } finally {
-            returnToMenu();
+        showLeaderboardDialog(gameId, speedLabel);
+        restartAfterLeaderboard(console);
+    }
+
+    private void restartAfterLeaderboard(GamingConsole console) {
+        if (console == null || console != currentConsole) {
+            return;
+        }
+
+        stopGameLoop();
+        console.reset();
+        console.setSpeedProfile(activeSpeedProfile);
+        console.startTimer();
+        updateStatusDisplay();
+        startGameLoop(console);
+        SwingUtilities.invokeLater(() -> {
+            if (gamePanel != null) {
+                gamePanel.requestFocusInWindow();
+            }
+        });
+    }
+
+    private void toggleFullscreen() {
+        if (fullscreenActive) {
+            setExtendedState(windowedState);
+            if (windowedBounds != null) {
+                setBounds(windowedBounds);
+            }
+        } else {
+            windowedState = getExtendedState();
+            windowedBounds = getBounds();
+            setExtendedState(JFrame.MAXIMIZED_BOTH);
+        }
+    }
+
+    private void updateFullscreenState(boolean maximized) {
+        fullscreenActive = maximized;
+        if (fullscreenButton != null) {
+            fullscreenButton.setText(maximized ? "Windowed" : "Fullscreen");
         }
     }
 

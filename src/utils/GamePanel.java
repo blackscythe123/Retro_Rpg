@@ -5,6 +5,8 @@ import javax.swing.JPanel;
 import java.awt.Graphics;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 
 /**
  * Game panel that handles rendering and input for games
@@ -16,6 +18,7 @@ public class GamePanel extends JPanel {
         this.console = console;
         setFocusable(true);
         addKeyListener(new GameKeyListener());
+        addMouseListener(new GameMouseListener());
     }
 
     @Override
@@ -41,6 +44,23 @@ public class GamePanel extends JPanel {
         public void keyReleased(KeyEvent e) {
             if (console != null) {
                 console.handleKeyRelease(e.getKeyCode());
+            }
+        }
+    }
+
+    private class GameMouseListener extends MouseAdapter {
+        @Override
+        public void mousePressed(MouseEvent e) {
+            requestFocusInWindow();
+            if (console != null) {
+                console.handleMousePressed(e.getButton(), e.getX(), e.getY());
+            }
+        }
+
+        @Override
+        public void mouseReleased(MouseEvent e) {
+            if (console != null) {
+                console.handleMouseReleased(e.getButton(), e.getX(), e.getY());
             }
         }
     }

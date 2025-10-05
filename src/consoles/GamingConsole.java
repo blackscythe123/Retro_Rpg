@@ -92,6 +92,20 @@ public abstract class GamingConsole implements Drawable, Updatable {
     public abstract void handleKeyRelease(int keyCode);
 
     /**
+     * Optional mouse press handler. Subclasses can override to support mouse controls.
+     */
+    public void handleMousePressed(int button, int x, int y) {
+        // Default: no-op
+    }
+
+    /**
+     * Optional mouse release handler. Subclasses can override to support mouse controls.
+     */
+    public void handleMouseReleased(int button, int x, int y) {
+        // Default: no-op
+    }
+
+    /**
      * Handle common key presses (pause, restart, exit)
      */
     public boolean handleCommonKeyPress(int keyCode) {
